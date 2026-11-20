@@ -1,10 +1,14 @@
 <p align="center">
-  <a href="#installation"><img src="./assets/logo.png" alt="logo" width="80"/></a>
+  <a href="#installation"><img src="./assets/obs_recording_indicator_logo.png" alt="logo" width="80"/></a>
 </p>
 <h1 align="center">Recording Indicator</h1>
 <h3 align="center">Made For Your OBS Studio<a href="#installation"></h3>
 <p align="center">
  <a href="#installation"><img src="./assets/summary_preview.png" alt="preview image" width="150"/></a>
+</p>
+
+<p align="center">
+ <a href="https://obsproject.com/forum/resources/recording-indicator.2716"><img src="./assets/Get_It_On_OBS.png" alt="Get_It_On_OBS Badge" width="200"/></a><a href="../../releases/latest"><img src="./assets/Get_It_On_GitHub.png" alt="Get_It_On_GitHub Badge" width="200"/></a>
 </p>
 
 ---

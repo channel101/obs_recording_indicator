@@ -44,195 +44,207 @@ def run_ui_process():
             ui_state.should_exit = True
 
     class IndicatorApp(tk.Frame):
-            def __init__(self, master=None):
-                super().__init__(master)
-                self.master = master
-                self.pack()
+        def __init__(self, master=None):
+            super().__init__(master)
+            self.master = master
+            self.pack()
 
-                self.start_time = 0.0
-                self.accumulated_time = 0.0
-                self.timer_running = False
-                self.last_time_str = "00:00:00"
-                self.is_visible = False
-                self.last_paused = None
-                self.last_timer_enabled = None
-                self.win_opacity = 0.8
-                self.master.configure(bg="#0f0f0f")
-                self.master.overrideredirect(True)
-                self.master.attributes("-topmost", True)
-                self.master.attributes("-transparentcolor", "#0f0f0f")
-                self.config(bg="#0f0f0f")
+            self.start_time = 0.0
+            self.accumulated_time = 0.0
+            self.timer_running = False
+            self.last_time_str = "00:00:00"
+            self.is_visible = False
+            self.last_paused = None
+            self.last_timer_enabled = None
+            self.win_opacity = 0.8
+            self.master.configure(bg="#0f0f0f")
+            self.master.overrideredirect(True)
+            self.master.attributes("-topmost", True)
+            self.master.attributes("-transparentcolor", "#0f0f0f")
+            self.config(bg="#0f0f0f")
 
-                self.master.withdraw()
+            self.master.withdraw()
 
-                if sys.platform == "win32":
-                    try:
-                        self.master.update_idletasks()
-                        WDA_EXCLUDEFROMCAPTURE = 0x00000011
-                        user32 = ctypes.windll.user32
-                        hwnd = user32.GetParent(self.master.winfo_id())
-                        if hwnd:
-                            user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
-                    except Exception:
-                        pass
+            if sys.platform == "win32":
+                try:
+                    self.master.update_idletasks()
+                    WDA_EXCLUDEFROMCAPTURE = 0x00000011
+                    user32 = ctypes.windll.user32
+                    hwnd = user32.GetParent(self.master.winfo_id())
+                    if hwnd:
+                        user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
+                except Exception:
+                    pass
 
-                self.update_position()
+            self.update_position()
 
-                self.container = Frame(
-                    self,
-                    bg="#252525",
-                    bd=0,
-                    highlightthickness=1,
-                    highlightbackground="#404040",
+            self.container = Frame(
+                self,
+                bg="#252525",
+                bd=0,
+                highlightthickness=1,
+                highlightbackground="#404040",
+            )
+            self.container.pack(padx=5, pady=5, fill=BOTH, expand=True)
+            font_style = font.Font(size=int(11 * self.scale), weight="bold")
+            self.icon_size = max(12, int(font_style.metrics("ascent") * 0.75))
+
+            self.canvas = Canvas(
+                self.container,
+                height=self.icon_size,
+                width=self.icon_size,
+                bg="#252525",
+                highlightthickness=0,
+            )
+            self.canvas.grid(row=0, column=0, padx=(10, 6), pady=6)
+            self.canvas.bind("<Button-1>", self.toggle_pause)
+
+            self.stopwatch_label = Label(
+                self.container,
+                text="00:00:00",
+                font=font_style,
+                bg="#252525",
+                fg="#ffffff",
+            )
+            self.stopwatch_label.grid(
+                row=0, column=1, padx=(0, 12), pady=6, sticky="ew"
+            )
+
+            self.popup_menu = Menu(self, tearoff=False)
+            self.popup_menu.add_command(
+                label="Pause Recording", command=self.toggle_pause
+            )
+            self.popup_menu.add_command(
+                label="Stop Recording", command=self.stop_recording
+            )
+            self.popup_menu.add_separator()
+            self.popup_menu.add_command(
+                label="Reset Window Location", command=self.update_position
+            )
+
+            self.master.bind("<Button-3>", self.show_menu)
+            self.master.bind("<Button-1>", self.on_click)
+            self.master.bind("<B1-Motion>", self.on_drag)
+            self.master.bind("<ButtonRelease-1>", self.on_release)
+
+            self.last_x = 0
+            self.last_y = 0
+
+            self.update_loop()
+
+        def draw_indicator(self, is_paused):
+            self.canvas.delete("all")
+            s = self.icon_size
+            p = max(1, int(s * 0.1))
+
+            if is_paused:
+                inner = s - 2 * p
+                bar_w = max(2, int(inner * 0.32))
+                x1 = p + int(inner * 0.12)
+                x2 = s - p - int(inner * 0.12) - bar_w
+                self.canvas.create_rectangle(
+                    x1, p, x1 + bar_w, s - p, fill="#f8a63d", outline=""
                 )
-                self.container.pack(padx=5, pady=5, fill=BOTH, expand=True)
-                font_style = font.Font(size=int(11 * self.scale), weight="bold")
-                self.icon_size = max(12, int(font_style.metrics("ascent") * 0.75))
-
-                self.canvas = Canvas(
-                    self.container,
-                    height=self.icon_size,
-                    width=self.icon_size,
-                    bg="#252525",
-                    highlightthickness=0,
+                self.canvas.create_rectangle(
+                    x2, p, x2 + bar_w, s - p, fill="#f8a63d", outline=""
                 )
-                self.canvas.grid(row=0, column=0, padx=(10, 6), pady=6)
-                self.canvas.bind("<Button-1>", self.toggle_pause)
+            else:
+                self.canvas.create_oval(p, p, s - p, s - p, fill="red", outline="")
 
-                self.stopwatch_label = Label(
-                    self.container,
-                    text="00:00:00",
-                    font=font_style,
-                    bg="#252525",
-                    fg="#ffffff",
-                )
-                self.stopwatch_label.grid(row=0, column=1, padx=(0, 12), pady=6, sticky="ew")
+        def update_position(self):
+            screen_w = self.master.winfo_screenwidth()
+            w = max(300, min(500, int(screen_w * 0.20)))
+            h = max(150, int(w * 0.20))
+            x = (screen_w - w) // 2
+            y = 20
+            self.scale = max(1.0, screen_w / 1920)
+            self.master.geometry(f"{w}x{h}+{x}+{y}")
+            self.master.update_idletasks()
 
-                self.popup_menu = Menu(self, tearoff=False)
-                self.popup_menu.add_command(label="Pause Recording", command=self.toggle_pause)
-                self.popup_menu.add_command(label="Stop Recording", command=self.stop_recording)
-                self.popup_menu.add_separator()
-                self.popup_menu.add_command(
-                    label="Reset Window Location", command=self.update_position
-                )
+        def on_click(self, event):
+            self.last_x = event.x
+            self.last_y = event.y
 
-                self.master.bind("<Button-3>", self.show_menu)
-                self.master.bind("<Button-1>", self.on_click)
-                self.master.bind("<B1-Motion>", self.on_drag)
-                self.master.bind("<ButtonRelease-1>", self.on_release)
+        def on_drag(self, event):
+            x = event.x - self.last_x + self.master.winfo_x()
+            y = event.y - self.last_y + self.master.winfo_y()
+            self.master.geometry(f"+{x}+{y}")
 
-                self.last_x = 0
-                self.last_y = 0
+        def on_release(self, event):
+            screen_w = self.master.winfo_screenwidth()
+            screen_h = self.master.winfo_screenheight()
+            win_w = self.master.winfo_width()
+            win_h = self.master.winfo_height()
 
-                self.update_loop()
+            new_x = max(0, min(self.master.winfo_x(), screen_w - win_w))
+            new_y = max(0, min(self.master.winfo_y(), screen_h - win_h))
+            self.master.geometry(f"+{new_x}+{new_y}")
 
-            def draw_indicator(self, is_paused):
-                self.canvas.delete("all")
-                s = self.icon_size
-                p = max(1, int(s * 0.1))
+        def show_menu(self, event):
+            self.popup_menu.tk_popup(event.x_root, event.y_root)
 
-                if is_paused:
-                    inner = s - 2 * p
-                    bar_w = max(2, int(inner * 0.32))
-                    x1 = p + int(inner * 0.12)
-                    x2 = s - p - int(inner * 0.12) - bar_w
-                    self.canvas.create_rectangle(x1, p, x1 + bar_w, s - p, fill="#f8a63d", outline="")
-                    self.canvas.create_rectangle(x2, p, x2 + bar_w, s - p, fill="#f8a63d", outline="")
-                else:
-                    self.canvas.create_oval(p, p, s - p, s - p, fill="red", outline="")
+        def toggle_pause(self, event=None):
+            print("TOGGLE_PAUSE", flush=True)
 
-            def update_position(self):
-                screen_w = self.master.winfo_screenwidth()
-                w = max(300, min(500, int(screen_w * 0.20)))
-                h = max(150, int(w * 0.20))
-                x = (screen_w - w) // 2
-                y = 20
-                self.scale = max(1.0, screen_w / 1920)
-                self.master.geometry(f"{w}x{h}+{x}+{y}")
-                self.master.update_idletasks()
+        def stop_recording(self):
+            print("STOP_RECORDING", flush=True)
 
-            def on_click(self, event):
-                self.last_x = event.x
-                self.last_y = event.y
+        def update_loop(self):
+            if ui_state.should_exit:
+                self.master.destroy()
+                return
 
-            def on_drag(self, event):
-                x = event.x - self.last_x + self.master.winfo_x()
-                y = event.y - self.last_y + self.master.winfo_y()
-                self.master.geometry(f"+{x}+{y}")
-
-            def on_release(self, event):
-                screen_w = self.master.winfo_screenwidth()
-                screen_h = self.master.winfo_screenheight()
-                win_w = self.master.winfo_width()
-                win_h = self.master.winfo_height()
-
-                new_x = max(0, min(self.master.winfo_x(), screen_w - win_w))
-                new_y = max(0, min(self.master.winfo_y(), screen_h - win_h))
-                self.master.geometry(f"+{new_x}+{new_y}")
-
-            def show_menu(self, event):
-                self.popup_menu.tk_popup(event.x_root, event.y_root)
-
-            def toggle_pause(self, event=None):
-                print("TOGGLE_PAUSE", flush=True)
-
-            def stop_recording(self):
-                print("STOP_RECORDING", flush=True)
-
-            def update_loop(self):
-                if ui_state.should_exit:
-                    self.master.destroy()
-                    return
-
-                if ui_state.is_recording:
-                    if not self.is_visible:
-                        self.master.deiconify()
-                        self.master.attributes("-alpha", self.win_opacity)
-                        self.master.attributes("-topmost", True)
-                        self.is_visible = True
-                        self.last_paused = None 
-                    if ui_state.is_paused != self.last_paused:
-                        self.draw_indicator(ui_state.is_paused)
-                        menu_label = "Unpause Recording" if ui_state.is_paused else "Pause Recording"
-                        self.popup_menu.entryconfig(0, label=menu_label)
-                        self.last_paused = ui_state.is_paused
-
-                        if ui_state.is_paused:
-                            if self.timer_running:
-                                self.accumulated_time += time.time() - self.start_time
-                                self.timer_running = False
-                        else:
-                            if not self.timer_running:
-                                self.start_time = time.time()
-                                self.timer_running = True
-
-                    if self.timer_running and ui_state.timer_enabled:
-                        elapsed = int(time.time() - self.start_time + self.accumulated_time)
-                        hours = elapsed // 3600
-                        minutes = (elapsed % 3600) // 60
-                        seconds = elapsed % 60
-                        time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-                        if time_str != self.last_time_str:
-                            self.stopwatch_label.config(text=time_str)
-                            self.last_time_str = time_str
-                else:
-                    if self.is_visible:
-                        self.master.withdraw()
-                        self.is_visible = False
+            if ui_state.is_recording:
+                if not self.is_visible:
+                    self.master.deiconify()
+                    self.master.attributes("-alpha", self.win_opacity)
+                    self.master.attributes("-topmost", True)
+                    self.is_visible = True
                     self.last_paused = None
-                    self.timer_running = False
-                    self.accumulated_time = 0.0
-                    if self.last_time_str != "00:00:00":
-                        self.stopwatch_label.config(text="00:00:00")
-                        self.last_time_str = "00:00:00"
-                if ui_state.timer_enabled != self.last_timer_enabled:
-                    if ui_state.timer_enabled:
-                        self.stopwatch_label.grid()
-                    else:
-                        self.stopwatch_label.grid_remove()
-                    self.last_timer_enabled = ui_state.timer_enabled
+                if ui_state.is_paused != self.last_paused:
+                    self.draw_indicator(ui_state.is_paused)
+                    menu_label = (
+                        "Unpause Recording" if ui_state.is_paused else "Pause Recording"
+                    )
+                    self.popup_menu.entryconfig(0, label=menu_label)
+                    self.last_paused = ui_state.is_paused
 
-                self.after(100, self.update_loop)
+                    if ui_state.is_paused:
+                        if self.timer_running:
+                            self.accumulated_time += time.time() - self.start_time
+                            self.timer_running = False
+                    else:
+                        if not self.timer_running:
+                            self.start_time = time.time()
+                            self.timer_running = True
+
+                if self.timer_running and ui_state.timer_enabled:
+                    elapsed = int(time.time() - self.start_time + self.accumulated_time)
+                    hours = elapsed // 3600
+                    minutes = (elapsed % 3600) // 60
+                    seconds = elapsed % 60
+                    time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                    if time_str != self.last_time_str:
+                        self.stopwatch_label.config(text=time_str)
+                        self.last_time_str = time_str
+            else:
+                if self.is_visible:
+                    self.master.withdraw()
+                    self.is_visible = False
+                self.last_paused = None
+                self.timer_running = False
+                self.accumulated_time = 0.0
+                if self.last_time_str != "00:00:00":
+                    self.stopwatch_label.config(text="00:00:00")
+                    self.last_time_str = "00:00:00"
+            if ui_state.timer_enabled != self.last_timer_enabled:
+                if ui_state.timer_enabled:
+                    self.stopwatch_label.grid()
+                else:
+                    self.stopwatch_label.grid_remove()
+                self.last_timer_enabled = ui_state.timer_enabled
+
+            self.after(100, self.update_loop)
 
     reader_thread = threading.Thread(target=stdin_reader, daemon=True)
     reader_thread.start()
@@ -255,11 +267,41 @@ class OBSState:
         self.is_recording = False
         self.is_paused = False
         self.timer_enabled = True
+        self.sound_enabled = False
+        self.start_sound_path = ""
+        self.stop_sound_path = ""
 
 
 state = OBSState()
 ui_proc = None
 cmd_queue = deque()
+
+
+def play_sound(file_path):
+    if not state.sound_enabled or not file_path or not os.path.isfile(file_path):
+        return
+
+    try:
+        if sys.platform == "win32":
+            import winsound
+
+            winsound.PlaySound(file_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        elif sys.platform == "darwin":
+            subprocess.Popen(
+                ["afplay", file_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            player = shutil.which("paplay") or shutil.which("aplay")
+            if player:
+                subprocess.Popen(
+                    [player, file_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+    except Exception as e:
+        print(f"[Recording Indicator] Failed to play sound: {e}")
 
 
 def find_python_executable():
@@ -373,17 +415,20 @@ def stop_ui_process():
 
 
 def frontend_event_handler(event):
-    if event in (
-        obs.OBS_FRONTEND_EVENT_RECORDING_STARTING,
-        obs.OBS_FRONTEND_EVENT_RECORDING_STARTED,
-    ):
+    if event == obs.OBS_FRONTEND_EVENT_RECORDING_STARTING:
         state.is_recording = True
         state.is_paused = False
         send_state_to_ui()
+    elif event == obs.OBS_FRONTEND_EVENT_RECORDING_STARTED:
+        state.is_recording = True
+        state.is_paused = False
+        send_state_to_ui()
+        play_sound(state.start_sound_path)
     elif event == obs.OBS_FRONTEND_EVENT_RECORDING_STOPPED:
         state.is_recording = False
         state.is_paused = False
         send_state_to_ui()
+        play_sound(state.stop_sound_path)
     elif event == obs.OBS_FRONTEND_EVENT_RECORDING_PAUSED:
         state.is_paused = True
         send_state_to_ui()
@@ -398,6 +443,9 @@ def script_load(settings):
     state.is_recording = obs.obs_frontend_recording_active()
     state.is_paused = obs.obs_frontend_recording_paused()
     state.timer_enabled = obs.obs_data_get_bool(settings, "timer_bool")
+    state.sound_enabled = obs.obs_data_get_bool(settings, "sound_bool")
+    state.start_sound_path = obs.obs_data_get_string(settings, "start_sound_path")
+    state.stop_sound_path = obs.obs_data_get_string(settings, "stop_sound_path")
 
     obs.obs_frontend_add_event_callback(frontend_event_handler)
     obs.timer_add(process_ui_commands, 100)
@@ -412,22 +460,51 @@ def script_unload():
 
 def script_update(settings):
     state.timer_enabled = obs.obs_data_get_bool(settings, "timer_bool")
+    state.sound_enabled = obs.obs_data_get_bool(settings, "sound_bool")
+    state.start_sound_path = obs.obs_data_get_string(settings, "start_sound_path")
+    state.stop_sound_path = obs.obs_data_get_string(settings, "stop_sound_path")
     send_state_to_ui()
 
 
 def script_defaults(settings):
     obs.obs_data_set_default_bool(settings, "timer_bool", True)
+    obs.obs_data_set_default_bool(settings, "sound_bool", False)
+    obs.obs_data_set_default_string(settings, "start_sound_path", "")
+    obs.obs_data_set_default_string(settings, "stop_sound_path", "")
 
 
 def script_properties():
     props = obs.obs_properties_create()
     obs.obs_properties_add_bool(props, "timer_bool", "Enable Timer")
+    obs.obs_properties_add_bool(props, "sound_bool", "Enable Sound Notifications")
+
+    if sys.platform == "win32":
+        audio_filter = "WAV Files (*.wav);;All Files (*.*)"
+    else:
+        audio_filter = "Audio Files (*.wav *.mp3 *.ogg);;All Files (*.*)"
+
+    obs.obs_properties_add_path(
+        props,
+        "start_sound_path",
+        "Start Recording Sound",
+        obs.OBS_PATH_FILE,
+        audio_filter,
+        None,
+    )
+    obs.obs_properties_add_path(
+        props,
+        "stop_sound_path",
+        "Stop Recording Sound",
+        obs.OBS_PATH_FILE,
+        audio_filter,
+        None,
+    )
     return props
 
 
 def script_description():
     return """
-    <h2><font color="white">Recording Indicator</font></h2>
+    <h2><font>Recording Indicator</font></h2>
     <p>Recording Indicator For Your OBS Studio</p>
     <hr>
 

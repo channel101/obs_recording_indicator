@@ -1,3 +1,7 @@
+# Copyright (c) 2026 channel101 (https://github.com/channel101)
+# Licensed under the Open Software License version 3.0
+# SPDX-License-Identifier: OSL-3.0
+
 import os
 import sys
 import json
